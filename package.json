@@ -14,7 +14,8 @@
     "lib",
     "cordis.patch.yml",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "screenshots.json"
   ],
   "keywords": [
     "deepseek-harness",
