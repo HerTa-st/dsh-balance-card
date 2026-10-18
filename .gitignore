@@ -1,0 +1,12 @@
+node_modules/
+.labhome/
+*.log
+._*
+.DS_Store
+
+# 验收/调试产物（脚本会写进仓库或工作区根）
+.verify-*.txt
+.shoot-*.txt
+.final-*.txt
+_drawer-*.png
+_balance-card-*.png
