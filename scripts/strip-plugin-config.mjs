@@ -35,7 +35,7 @@ const BLOCK = [
   "# sessionsRoot / workspace 指向**真实工作区**，让卡片读真数字；",
   "# balanceUrl 指向本地假服务器，用于可控复现失败态。",
   "- id: balance-card",
-  "  name: dsh-balance-card",
+  "  name: dsh-herta-balance-card",
   "  config:",
   "    workspace: E:\\deepseek工作区\\HerTa",
   "    sessionsRoot: C:\\Users\\梦源\\.dsh\\sessions",

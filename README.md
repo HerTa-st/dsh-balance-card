@@ -167,22 +167,27 @@ $py = 'E:\deepseek Desktop\resources\runtime\primary-runtime\dependencies\python
 ## 安装
 
 ```powershell
-# 1) 克隆
-git clone https://github.com/HerTa-st/dsh-balance-card
-
-# 2) 装进某个 profile（本仓库用 herta-lab 验证过）
 $env:DSH_HOME='<你的 DSH_HOME>'
+
+# A) 从 npm 装（预构建，免 allowBuilds 授权）
+& '<DSH 安装目录>\runtime\cli\bin\dsh.cmd' plugin --profile <profile> add dsh-herta-balance-card
+
+# B) 或者克隆源码后从本地路径装（本仓库用 herta-lab 验证过）
+git clone https://github.com/HerTa-st/dsh-balance-card
 & '<DSH 安装目录>\runtime\cli\bin\dsh.cmd' plugin --profile <profile> add 'file:<克隆路径>'
 ```
+
+> npm 包名是 **`dsh-herta-balance-card`**（仓库名 `dsh-balance-card` 在 npm 上已被另一个同名插件占用；
+> `cordis.patch.yml` 里的 loader `name` 与包名一致，装的时候按包名来）。
 
 包自带 `cordis.patch.yml`，`plugin add` 会同时写 `dependencies` 与 `dsh.profile.bundles`，
 patch 自动应用。**装完要重启**（bundle 变更属启动期合成）。
 
 > 本机验证时 pnpm 报了 `ERR_PNPM_UNEXPECTED_STORE`（store 路径不一致），
 > 因此改用**目录联接**接线，效果与 pnpm 的 `file:` 符号链接等价：
-> `New-Item -ItemType Junction -Path <profile>\node_modules\dsh-balance-card -Target <本仓库路径>`，
-> 并在 profile 的 `package.json` 加 `"dsh-balance-card": "link:<本仓库路径>"`、
-> 在 `dsh.profile.bundles` 里加 `"dsh-balance-card"`。宿主只用 Node 内置模块，
+> `New-Item -ItemType Junction -Path <profile>\node_modules\dsh-herta-balance-card -Target <本仓库路径>`，
+> 并在 profile 的 `package.json` 加 `"dsh-herta-balance-card": "link:<本仓库路径>"`、
+> 在 `dsh.profile.bundles` 里加 `"dsh-herta-balance-card"`。宿主只用 Node 内置模块，
 > 客户端只用浏览器种子模块，所以不需要 pnpm 装任何东西。
 
 ---
@@ -208,7 +213,7 @@ patch 自动应用。**装完要重启**（bundle 变更属启动期合成）。
 
 ```yaml
 - id: balance-card
-  name: dsh-balance-card
+  name: dsh-herta-balance-card
   config:
     workspace: E:\deepseek工作区\HerTa
     sessionsRoot: C:\Users\梦源\.dsh\sessions

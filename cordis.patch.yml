@@ -1,4 +1,5 @@
-# dsh-balance-card —— 把「余额与用量」这张浮层卡片装进 DSH。
+# dsh-herta-balance-card —— 把「余额与用量」这张浮层卡片装进 DSH。
+# npm 包名是 dsh-herta-balance-card；仓库名仍是 dsh-balance-card（后者在 npm 上已被别的插件占用）。
 #
 # 用法：`dsh plugin --profile <name> add <本仓库路径>` 会把这个包同时写进 profile 的
 # dependencies 与 dsh.profile.bundles，而包自带的这份 patch 会自动应用 —— 所以
@@ -9,11 +10,11 @@
 # 覆盖式条目**（不是 `insert:`），它按 id 合并进本行、只改 config：
 #
 #   - id: balance-card
-#     name: dsh-balance-card
+#     name: dsh-herta-balance-card
 #     config:
 #       mockBalance: true
 #
 # 设置的真相就在这一行的 config 里，命名空间 = 条目 id `balance-card`。
 - insert:
     - id: balance-card
-      name: dsh-balance-card
+      name: dsh-herta-balance-card
