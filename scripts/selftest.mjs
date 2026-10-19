@@ -9,7 +9,7 @@
  * 跑法：`E:\node\node.exe scripts/selftest.mjs`（可选 `--sessions-root <路径>`）。
  */
 import { createServer } from "node:http";
-import { readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -328,7 +328,7 @@ async function balanceStateTest() {
 }
 
 // ── 5. 用量折叠（真实会话日志）─────────────────────────────────
-section("5. 用量折叠（真实会话日志）");
+section("5. 用量折叠（真实会话日志快照）");
 async function usageTest(sessionsRoot) {
   const slug = workspaceSlug("E:\\deepseek工作区\\HerTa");
   let names = [];
@@ -341,8 +341,20 @@ async function usageTest(sessionsRoot) {
   const matched = names.filter((n) => statSync(join(sessionsRoot, n)).isDirectory() && n === slug);
   ok(`slug 能在真实目录里命中（${slug}）`, matched.length === 1, `命中 ${matched.length} 个：${names.join(", ")}`);
 
+  // 语料快照：真实会话目录随时会被宿主追加写入。不冻结的话，「第二轮数字一致」这类断言
+  // 会因为测试期间又落了新事件而假失败（实测：活跃语料 87/92、冻结后 92/92）。
+  // 只拷当前工作区的 slug 目录；断言「slug 能在真实目录里命中」仍用真实目录。
+  const snapshotRoot = mkdtempSync(join(tmpdir(), "dsh-balance-card-selftest-sessions-"));
+  const snapshotDir = join(snapshotRoot, slug);
+  mkdirSync(snapshotDir, { recursive: true });
+  for (const name of readdirSync(join(sessionsRoot, slug))) {
+    const src = join(sessionsRoot, slug, name);
+    if (!statSync(src).isDirectory()) continue;
+    cpSync(src, join(snapshotDir, name), { recursive: true });
+  }
+
   const aggregator = new UsageAggregator({
-    sessionsRoot,
+    sessionsRoot: snapshotRoot,
     workspaceSlug: slug,
     offsetMinutes: 480,
   });
@@ -382,7 +394,7 @@ async function usageTest(sessionsRoot) {
 
   // ── 落盘缓存：换一个**新进程**最关心的场景 —— 进程重启后第一次打开要快 ──
   const cachePath = join(tmpdir(), `dsh-balance-card-selftest-${process.pid}.json`);
-  const fresh = new UsageAggregator({ sessionsRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
+  const fresh = new UsageAggregator({ sessionsRoot: snapshotRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
   const tSave = Date.now();
   const coldScan = await fresh.collect();
   const fullParseMs = Date.now() - tSave;
@@ -390,7 +402,7 @@ async function usageTest(sessionsRoot) {
   const saved = await fresh.saveCache();
   ok("能写出落盘缓存", saved === true, cachePath);
 
-  const warmed = new UsageAggregator({ sessionsRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
+  const warmed = new UsageAggregator({ sessionsRoot: snapshotRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
   const loaded = await warmed.loadCache();
   const tWarm = Date.now();
   await warmed.collect();
@@ -404,7 +416,7 @@ async function usageTest(sessionsRoot) {
   ok("装缓存后明显更快（至少 5×）", warmFromCacheMs * 5 < fullParseMs, `${warmFromCacheMs} ms vs ${fullParseMs} ms`);
 
   // 缓存键必须认 size+mtime：伪造一个「mtime 变了」的条目，应当被当作失效而重算。
-  const stale = new UsageAggregator({ sessionsRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
+  const stale = new UsageAggregator({ sessionsRoot: snapshotRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
   await stale.loadCache();
   for (const entry of stale.files.values()) entry.mtimeMs = 1;
   const staleScan = await stale.collect();
@@ -412,12 +424,13 @@ async function usageTest(sessionsRoot) {
 
   // 坏缓存不该让插件崩
   writeFileSync(cachePath, "{ 这不是 JSON", "utf8");
-  const broken = new UsageAggregator({ sessionsRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
+  const broken = new UsageAggregator({ sessionsRoot: snapshotRoot, workspaceSlug: slug, offsetMinutes: 480, cachePath });
   const brokenLoaded = await broken.loadCache();
   ok("坏缓存被安全忽略（不抛错）", brokenLoaded === false);
   await broken.collect();
   ok("坏缓存后仍能正常聚合", broken.summarize().windows.all.calls === coldSummary.windows.all.calls);
   rmSync(cachePath, { force: true });
+  rmSync(snapshotRoot, { recursive: true, force: true });
 }
 
 async function main() {
