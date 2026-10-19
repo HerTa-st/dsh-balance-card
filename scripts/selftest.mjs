@@ -23,7 +23,7 @@ import {
   readAccountGrant,
 } from "../lib/balance.js";
 import { workspaceSlug } from "../lib/index.js";
-import { estimateCost, priceOf } from "../lib/pricing.js";
+import { CN_HOLIDAYS, estimateCost, isPeakAt, priceOf } from "../lib/pricing.js";
 import { UsageAggregator, formatMoney, formatTokens } from "../lib/usage.js";
 
 let failures = 0;
@@ -56,16 +56,50 @@ for (const [cwd, expected] of CASES) {
 }
 
 // ── 2. 单价与花费 ──────────────────────────────────────────────
-section("2. 单价与花费");
+section("2. 单价与花费（峰谷两档）");
 ok("flash 有单价", priceOf("deepseek-flash") !== null);
 ok("mimo 无公开单价（应返回 null，不是 0）", priceOf("mimo-v2.6-flash") === null);
-const oneM = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 0, output: 0 });
-ok("flash：1M 命中 = ￥0.02", oneM !== null && Math.abs(oneM - 0.02) < 1e-9, `得到 ${oneM}`);
-const mixed = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 1_000_000, output: 1_000_000 });
-ok("flash：命中+未命中+输出 各 1M = ￥5.02", mixed !== null && Math.abs(mixed - 5.02) < 1e-9, `得到 ${mixed}`);
+const oneMPeak = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 0, output: 0 });
+ok("flash：高峰 1M 命中 = ￥0.04", oneMPeak !== null && Math.abs(oneMPeak - 0.04) < 1e-9, `得到 ${oneMPeak}`);
+const oneMOff = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 0, output: 0 }, { peak: false });
+ok("flash：空闲 1M 命中 = ￥0.02（官方：空闲价是高峰价一半）", oneMOff !== null && Math.abs(oneMOff - 0.02) < 1e-9, `得到 ${oneMOff}`);
+const mixedPeak = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 1_000_000, output: 1_000_000 });
+ok("flash：高峰 三段各 1M = ￥10.04", mixedPeak !== null && Math.abs(mixedPeak - 10.04) < 1e-9, `得到 ${mixedPeak}`);
+const mixedOff = estimateCost("deepseek-flash", { cacheHit: 1_000_000, cacheMiss: 1_000_000, output: 1_000_000 }, { peak: false });
+ok("flash：空闲 三段各 1M = ￥5.02", mixedOff !== null && Math.abs(mixedOff - 5.02) < 1e-9, `得到 ${mixedOff}`);
+const proPeakMiss = estimateCost("deepseek-v4-pro", { cacheHit: 0, cacheMiss: 1_000_000, output: 0 });
+ok("pro：高峰 1M 未命中 = ￥9", proPeakMiss !== null && Math.abs(proPeakMiss - 9) < 1e-9, `得到 ${proPeakMiss}`);
+const proOffMiss = estimateCost("deepseek-v4-pro", { cacheHit: 0, cacheMiss: 1_000_000, output: 0 }, { peak: false });
+ok("pro：空闲 1M 未命中 = ￥4.5", proOffMiss !== null && Math.abs(proOffMiss - 4.5) < 1e-9, `得到 ${proOffMiss}`);
 ok("无单价模型返回 null", estimateCost("mimo-v2.6-flash", { cacheHit: 1e6, cacheMiss: 0, output: 0 }) === null);
 ok("formatMoney(0.004) → <￥0.01", formatMoney(0.004) === "<￥0.01", formatMoney(0.004));
 ok("formatTokens(1_275_011) → 1.28M", formatTokens(1_275_011) === "1.28M", formatTokens(1_275_011));
+
+// ── 2b. 峰谷时段判定 ────────────────────────────────────────────
+section("2b. 峰谷时段判定（北京时间、法定节假日）");
+/** 把北京时间（YYYY-MM-DD HH:mm）换成 epoch ms。 */
+const bj = (y, mo, d, h, mi = 0) => Date.UTC(y, mo - 1, d, h - 8, mi);
+const PEAK_CASES = [
+  ["周一 08:59", bj(2026, 10, 19, 8, 59), false],
+  ["周一 09:00（高峰起点）", bj(2026, 10, 19, 9, 0), true],
+  ["周一 11:59", bj(2026, 10, 19, 11, 59), true],
+  ["周一 12:00（高峰终点 = 空闲）", bj(2026, 10, 19, 12, 0), false],
+  ["周一 13:59", bj(2026, 10, 19, 13, 59), false],
+  ["周一 14:00（下午高峰起点）", bj(2026, 10, 19, 14, 0), true],
+  ["周一 17:59", bj(2026, 10, 19, 17, 59), true],
+  ["周一 18:00（下午高峰终点 = 空闲）", bj(2026, 10, 19, 18, 0), false],
+  ["周六 10:00（周末全天空闲）", bj(2026, 10, 17, 10, 0), false],
+  ["国庆 10-01 周四 10:00（法定节假日）", bj(2026, 10, 1, 10, 0), false],
+  ["中秋 09-25 周五 10:00（法定节假日）", bj(2026, 9, 25, 10, 0), false],
+  ["春节 02-17 周二 10:00（法定节假日）", bj(2026, 2, 17, 10, 0), false],
+  ["01-04 周日 10:00（调休上班日也是周末）", bj(2026, 1, 4, 10, 0), false],
+  ["08-14 周五 10:00（峰谷生效前一律空闲价）", bj(2026, 8, 14, 10, 0), false],
+  ["08-17 周一 10:00（生效后第一个工作日）", bj(2026, 8, 17, 10, 0), true],
+];
+for (const [name, at, expected] of PEAK_CASES) {
+  ok(`峰谷：${name}`, isPeakAt(at) === expected, `得到 ${isPeakAt(at)}，期望 ${expected}`);
+}
+ok("节假日表 33 天（2026 国办发明电〔2025〕7 号）", CN_HOLIDAYS.size === 33, `size=${CN_HOLIDAYS.size}`);
 
 // ── 3. 余额响应解析 ────────────────────────────────────────────
 section("3. 余额响应解析");
@@ -330,6 +364,12 @@ async function usageTest(sessionsRoot) {
   ok("本月 ≥ 近 7 天", summary.windows.month.calls >= summary.windows.week.calls);
   ok("全部 ≥ 本月", summary.windows.all.calls >= summary.windows.month.calls);
   ok("有缓存命中 token（证明逐帧解压生效）", summary.windows.all.hit > 0, `hit=${summary.windows.all.hit}`);
+  for (const [key, win] of Object.entries(summary.windows)) {
+    ok(`峰谷次数之和 = 调用次数（${key}）`, win.peakCalls + win.offPeakCalls === win.calls, `${win.peakCalls}+${win.offPeakCalls} vs ${win.calls}`);
+    if (!win.unpriced) {
+      ok(`峰谷花费之和 = 总花费（${key}）`, Math.abs(win.peakCost + win.offPeakCost - win.cost) < 1e-9, `${win.peakCost}+${win.offPeakCost} vs ${win.cost}`);
+    }
+  }
 
   // 增量：第二次几乎不动任何文件，且数字不变。
   const t1 = Date.now();

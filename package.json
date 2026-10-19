@@ -1,6 +1,6 @@
 {
   "name": "dsh-herta-balance-card",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 插件：一张可拖动的「余额与用量」浮层卡片 —— 官方 DeepSeek 余额 + 本地会话 token 三段计价估算。 · DSH plugin: a draggable balance & usage card for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",
